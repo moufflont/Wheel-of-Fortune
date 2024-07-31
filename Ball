@@ -1,0 +1,40 @@
+package app;
+
+import java.awt.*;
+
+import static app.Constants.MAX_COLOR;
+import static app.Constants.MIN_COLOR;
+
+public class Ball {
+    double radius;
+    double mass;
+    double restitution;
+    Vector2D pos;
+    Vector2D vel;
+    Color color;
+
+    Ball(double radius, double mass, Vector2D pos, Vector2D vel, double restitution) {
+        this.radius = radius;
+        this.mass = mass;
+        this.restitution = restitution; // elasticity factor
+        this.pos = pos.cloneVector();
+        this.vel = vel.cloneVector();
+        // TASK 1: Implement a field in the ball class, so that each ball can
+        // get an individual color.
+        this.color = getRandomColor();    }
+
+    void simulate(double dt, Vector2D gravity) {
+        this.vel.addScaled(gravity, dt);
+        this.pos.addScaled(this.vel, dt);
+    }
+   //Methode um zufällige Farbe zu erzeugen
+   Color getRandomColor(){
+        int r= ((int)(Math.random() * (MAX_COLOR - MIN_COLOR)) + MIN_COLOR);
+        int g= ((int)(Math.random() * (MAX_COLOR - MIN_COLOR)) + MIN_COLOR);
+        int b =((int)(Math.random() * (MAX_COLOR - MIN_COLOR)) + MIN_COLOR);
+        return new Color(r,g,b);
+    }
+    Color getColor(){
+        return this.color;
+    }
+}
