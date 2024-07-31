@@ -1,0 +1,180 @@
+package app;
+
+import utils.ApplicationTime;
+
+import javax.swing.*;
+import java.awt.*;
+import java.util.ArrayList;
+
+public class BilliardAnimation extends Animation {
+
+	@Override
+	protected ArrayList<JFrame> createFrames(ApplicationTime applicationTimeThread) {
+		// a list of all frames (windows) that will be shown
+		ArrayList<JFrame> frames = new ArrayList<>();
+
+		// Create main frame (window)
+		JFrame frame = new JFrame("Mathematics and Simulation: Workshop 04");
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		BilliardAnimationPanel panel = new BilliardAnimationPanel(applicationTimeThread);
+		frame.setLayout(new BorderLayout());
+		frame.add(panel, BorderLayout.CENTER);
+		frame.pack(); // adjusts size of the JFrame to fit the size of it's components
+		frame.setVisible(true);
+
+		frames.add(frame);
+		return frames;
+	}
+}
+
+class BilliardAnimationPanel extends JPanel {
+	private final PhysicsScene physicsScene;
+	private final ApplicationTime thread;
+	private double cScale;
+	private double simWidth;
+	private double simHeight;
+	private double lastFrameTime;
+
+	public BilliardAnimationPanel(ApplicationTime thread) {
+		physicsScene = new PhysicsScene();
+		this.thread = thread;
+	}
+
+	// set this panel's preferred size for auto-sizing the container JFrame
+	public Dimension getPreferredSize() {
+		return new Dimension(Constants.WINDOW_WIDTH, Constants.WINDOW_HEIGHT);
+	}
+
+	// drawing operations should be done in this method
+	@Override
+	protected void paintComponent(Graphics g) {
+
+		super.paintComponent(g);
+		//System.out.println("paintComponent");
+		updateSize();
+		if (!physicsScene.isInitialized) {
+			physicsScene.setup(this.simWidth, this.simHeight);
+		}
+		simulate();
+		draw(g);
+	}
+
+	// transform into drawing coordinates
+	int cX(Vector2D pos, double radius) {
+		return (int) ((pos.x - radius) * cScale );
+	}
+
+	int cY(Vector2D pos, double radius) {
+		return (int) (this.getHeight() - ((pos.y + radius) * cScale));
+	}
+
+	public void updateSize() {
+		// set simulation size with respect to window size
+		double simMinWidth = 20.0;
+		cScale = Math.min(this.getWidth(), this.getHeight()) / simMinWidth;
+		simWidth = this.getWidth() / cScale;
+		simHeight = this.getHeight() / cScale;
+		physicsScene.update( this.simWidth, this.simHeight);
+	}
+
+	void draw(Graphics g) {
+		g.setColor(Color.LIGHT_GRAY);
+		g.fillRect(0, 0, this.getWidth(), this.getHeight());
+		// iterate through balls
+
+		for (int i = 0; i < physicsScene.balls.size(); i++) {
+			Ball ball = physicsScene.balls.get(i);
+			// TASK 1: Implement a field in the ball class, so that each ball
+			// can get an individual color.
+			g.setColor(ball.getColor());
+			g.fillOval(cX(ball.pos, ball.radius),
+					cY(ball.pos, ball.radius),
+					(int) (cScale * ball.radius * 2.0),
+					(int) (cScale * ball.radius * 2.0));
+		}
+	}
+
+	void simulate() {
+		double dt;
+		if (Constants.SIMULATE_WITH_RENDER_TIME) {
+			double time = this.thread.getTimeInSeconds();
+			dt = time - lastFrameTime;
+			lastFrameTime = time;
+		}
+		else {
+			dt = physicsScene.dt;
+		}
+		// iterate through balls
+		for (int i = 0; i < physicsScene.balls.size(); i++) {
+			Ball ball1 = physicsScene.balls.get(i);
+			ball1.simulate(dt, physicsScene.gravity);
+			for (int j = i + 1; j < physicsScene.balls.size(); j++) {
+				var ball2 = physicsScene.balls.get(j);
+				handleBallCollision(ball1, ball2, physicsScene.restitution);
+			}
+			handleWallCollision(ball1, physicsScene.worldSize);
+		}
+	}
+
+	// collision handling --------------------------------------------------
+	void handleWallCollision(Ball ball, Vector2D worldSize) {
+		if (ball.pos.x < ball.radius) {
+			ball.pos.x = ball.radius;
+			ball.vel.x = -ball.vel.x;
+		}
+		if (ball.pos.x > worldSize.x - ball.radius) {
+			ball.pos.x = worldSize.x - ball.radius;
+			ball.vel.x = -ball.vel.x;
+		}
+		if (ball.pos.y < ball.radius) {
+			ball.pos.y = ball.radius;
+			ball.vel.y = -ball.vel.y;
+		}
+
+		if (ball.pos.y > worldSize.y - ball.radius) {
+			ball.pos.y = worldSize.y - ball.radius;
+			ball.vel.y = -ball.vel.y;
+		}
+	}
+
+	void handleBallCollision(Ball ball1, Ball ball2, double restitution) {
+		// Check distance and get direction between ball centers
+		Vector2D dir = new Vector2D(0.0,0.0);
+		dir.subtractVectors(ball2.pos, ball1.pos);
+		double distance = dir.length();
+
+        if (distance < ball1.radius + ball2.radius)
+        {
+            // Compute collision response and new velocities
+            Vector2D n = dir.cloneVector();
+            n.scale(1.0/distance);
+            // Correction of positions to contact points
+            double corr = (ball1.radius + ball2.radius - distance) / 2.0;
+            ball1.pos.addScaled(n, -corr);
+            ball2.pos.addScaled(n, corr);
+            // TASK 2: Comment out the three lines above and observe what
+            // happens. Extend the code comment so that it explains why the
+            // correction is necessary.
+            //Answer: The correction stops the Balls from overlapping.
+            //When they overlap, they are colliding. In the next frame they are still overlapping
+            //and therefore still colliding, so they would be caught in an endless collision.
+
+            double v1 = ball1.vel.dot(n);
+			double m1 = ball1.mass;
+			double v2 = ball2.vel.dot(n);
+			double m2 = ball2.mass;
+			double e = physicsScene.restitution;
+			double v1new =
+					((v1*m1 + v2*m2) - m2*(v1 - v2)*e)/(m1+m2);
+			double v2new =
+					((v1*m1 + v2*m2) - m1*(v2 - v1)*e)/(m1+m2);
+
+			// Apply new velocities
+			ball1.vel.addScaled(n,v1new-v1);
+			ball2.vel.addScaled(n,v2new-v2);
+		}
+
+
+
+	}
+}
